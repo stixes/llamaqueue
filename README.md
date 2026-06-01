@@ -33,6 +33,53 @@ Scraping `GET /metrics` returns aggregated Prometheus metrics for all models cur
 
 The custom metric `llamaqueue:requests_deferred` tracks the number of clients currently waiting in the queue.
 
+## Quick Start
+
+### Docker Compose (recommended)
+
+The typical deployment pairs LlamaQueue with a `llama-server` container. LlamaQueue is the only exposed service; `llama-server` stays internal to the stack.
+
+```yaml
+services:
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    volumes:
+      - ./models:/models
+    command: >
+      -m /models/your-model.gguf
+      --host 0.0.0.0
+      --port 8080
+      --ctx-size 4096
+    restart: unless-stopped
+
+  llamaqueue:
+    image: ghcr.io/stixes/llamaqueue:1
+    environment:
+      LLAMA_URL: http://llama-server:8080
+    ports:
+      - "8000:8000"
+    depends_on:
+      - llama-server
+    restart: unless-stopped
+```
+
+Start it with:
+
+```bash
+docker compose up -d
+```
+
+Your OpenAI-compatible endpoint is then available at `http://localhost:8000`.
+
+### Run directly
+
+```bash
+docker run -d \
+  -e LLAMA_URL=http://your-llama-server:8080 \
+  -p 8000:8000 \
+  ghcr.io/stixes/llamaqueue:1
+```
+
 ## Configuration
 
 The following environment variables can be used to tune the proxy:
