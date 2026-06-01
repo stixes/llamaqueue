@@ -86,3 +86,9 @@ The following environment variables can be used to tune the proxy:
 - `LLAMA_URL`: URL of the backend `llama-server` (default: `http://llama-server:8080`).
 - `MAX_QUEUE_SIZE`: Maximum number of requests allowed to wait in the queue (default: `100`).
 - `MAX_BODY_SIZE`: Maximum allowed size for request bodies in bytes (default: `50MB`).
+
+## AI Attribution
+
+This project was designed and implemented with the assistance of [Claude](https://anthropic.com/claude) (Anthropic) via [OpenCode](https://opencode.ai). The code, architecture decisions, and documentation were produced through human-AI collaboration.
+
+If you find a bug or have a concern about the implementation, please [open an issue](https://github.com/stixes/llamaqueue/issues).
