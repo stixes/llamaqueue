@@ -28,6 +28,10 @@ Its primary purpose is to serialize (queue) incoming LLM inference requests to p
 5. **Client Disconnect Handling:** - Uses `request.is_disconnected()` to drop dead requests *before* and *during* the lock, preventing the backend from loading models for clients that have already timed out.
 6. **Log Filtering:** - A custom `logging.Filter` suppresses `/metrics` spam from Uvicorn's access logs.
 
+## Development Approach
+- **ATDD (Acceptance Test-Driven Development):** Define acceptance criteria before implementing features.
+- **Testing Policy:** Add tests only for significant features or when explicitly requested. Keep the test suite lean.
+
 ## Rules for AI Assistant
 When assisting with modifications to this codebase, adhere strictly to the following rules:
 - **Preserve the Lock:** Never alter the `asyncio.Lock` logic in a way that allows concurrent inference requests to reach the backend.
