@@ -40,6 +40,38 @@ async def lifespan(app: FastAPI):
         app.state.client = client
         yield
 
+class HeaderAwareStreamingResponse(StreamingResponse):
+    """StreamingResponse that captures backend headers from the first yield
+    before sending the http.response.start ASGI message."""
+
+    async def __call__(self, scope, receive, send):
+        ait = self.body_iterator.__aiter__()
+        try:
+            first = await ait.__anext__()
+        except StopAsyncIteration:
+            first = b""
+
+        if isinstance(first, dict):
+            for k, v in first.items():
+                self.headers[k] = v
+            try:
+                chunk = await ait.__anext__()
+            except StopAsyncIteration:
+                chunk = b""
+        else:
+            chunk = first
+
+        await send({
+            "type": "http.response.start",
+            "status": self.status_code,
+            "headers": self.raw_headers,
+        })
+        if chunk:
+            await send({"type": "http.response.body", "body": chunk, "more_body": True})
+        async for c in ait:
+            await send({"type": "http.response.body", "body": c, "more_body": True})
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
+
 app = FastAPI(lifespan=lifespan)
 
 def get_forward_headers(request: Request) -> dict:
@@ -51,34 +83,34 @@ def get_forward_headers(request: Request) -> dict:
     return headers
 
 async def stream_backend(method: str, url: str, content: bytes, request: Request):
-    """Generator for streaming backend responses while holding the inference lock."""
+    """Generator for streaming backend responses while holding the inference lock.
+    Yields a dict of headers first, then raw byte chunks."""
     global queued_requests
     queued_requests += 1
     in_queue = True
 
     try:
-        # The lock is held INSIDE the generator to ensure sequential processing
-        # and prevent llama-server from crashing during model swaps.
         async with lock:
             queued_requests -= 1
             in_queue = False
 
-            # Check if the client disconnected while waiting in the queue
             if await request.is_disconnected():
+                yield {}
                 return
 
             client = request.app.state.client
             headers = get_forward_headers(request)
 
-            # Inference streaming is unbounded by timeout at the proxy level
             async with client.stream(method, url, content=content, headers=headers, timeout=None) as response:
+                fwd = {k: v for k, v in response.headers.items()
+                       if k.lower() not in {"transfer-encoding", "connection", "content-length"}}
+                yield fwd
+
                 async for chunk in response.aiter_bytes():
                     if await request.is_disconnected():
-                        # Stop processing if the client drops the connection
                         break
                     yield chunk
     finally:
-        # Safety net: ensure the queue counter is decremented if the request was aborted before acquiring the lock
         if in_queue:
             queued_requests -= 1
 
@@ -164,7 +196,7 @@ async def proxy(request: Request, path: str):
             raise HTTPException(status_code=413, detail="Request entity too large")
             
         body = await request.body()
-        return StreamingResponse(stream_backend(method, url, body, request))
+        return HeaderAwareStreamingResponse(stream_backend(method, url, body, request))
 
     # 2. Metrics interception: Aggregate and inject model labels
     if method == "GET" and clean_path == "metrics":
