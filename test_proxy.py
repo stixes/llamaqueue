@@ -170,3 +170,39 @@ def test_metrics_include_queue_depth(client, mock_llama):
 
     assert response.status_code == 200
     assert "llamaqueue:requests_deferred 5" in response.text
+
+
+def test_backend_read_error_returns_error_json(client, mock_llama):
+    """When backend drops the connection during streaming, proxy returns an error response."""
+    from httpx import ReadError
+
+    # Simulate the backend raising ReadError during stream
+    mock_llama.post("http://mock-llama:8080/v1/chat/completions").mock(
+        side_effect=ReadError("Connection lost")
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "test-model", "messages": [{"role": "user", "content": "hi"}]},
+    )
+
+    assert response.status_code == 200
+    assert "Backend connection lost during streaming" in response.text
+    assert "read_error" in response.text
+
+
+def test_backend_remote_protocol_error_returns_error_json(client, mock_llama):
+    """When backend sends a malformed response, proxy returns an error response."""
+    from httpx import RemoteProtocolError
+
+    mock_llama.post("http://mock-llama:8080/v1/chat/completions").mock(
+        side_effect=RemoteProtocolError("Bad protocol")
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "test-model", "messages": [{"role": "user", "content": "hi"}]},
+    )
+
+    assert response.status_code == 200
+    assert "Backend connection lost during streaming" in response.text

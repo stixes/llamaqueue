@@ -101,15 +101,19 @@ async def stream_backend(method: str, url: str, content: bytes, request: Request
             client = request.app.state.client
             headers = get_forward_headers(request)
 
-            async with client.stream(method, url, content=content, headers=headers, timeout=None) as response:
-                fwd = {k: v for k, v in response.headers.items()
-                       if k.lower() not in {"transfer-encoding", "connection", "content-length"}}
-                yield fwd
+            try:
+                async with client.stream(method, url, content=content, headers=headers, timeout=None) as response:
+                    fwd = {k: v for k, v in response.headers.items()
+                           if k.lower() not in {"transfer-encoding", "connection", "content-length"}}
+                    yield fwd
 
-                async for chunk in response.aiter_bytes():
-                    if await request.is_disconnected():
-                        break
-                    yield chunk
+                    async for chunk in response.aiter_bytes():
+                        if await request.is_disconnected():
+                            break
+                        yield chunk
+            except (httpx.ReadError, httpx.RemoteProtocolError) as e:
+                yield {"content-type": "application/json"}
+                yield b'{"error":{"message":"Backend connection lost during streaming","type":"read_error"}}'
     finally:
         if in_queue:
             queued_requests -= 1
