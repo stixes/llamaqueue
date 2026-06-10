@@ -106,8 +106,8 @@ async def refresh_model_cache(client: httpx.AsyncClient) -> set:
         resp = await client.get(f"{LLAMA_URL}/v1/models", timeout=ADMIN_TIMEOUT)
         resp.raise_for_status()
         known_models_cache = {m["id"] for m in resp.json().get("data", [])}
-    except Exception:
-        pass
+    except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        logging.warning(f"Failed to refresh model cache from backend: {e}")
     return known_models_cache
 
 async def resolve_and_validate_model(request: Request, body: bytes) -> str | None:
@@ -323,13 +323,13 @@ async def proxy(request: Request, path: str):
 
         # Also refresh model cache when /v1/models is queried
         if method == "GET" and clean_path == "v1/models":
-            try:
-                data = resp.json()
-                async with model_cache_lock:
-                    known_models_cache.clear()
-                    known_models_cache.update(m["id"] for m in data.get("data", []))
-            except Exception:
-                pass
+                 try:
+                     data = resp.json()
+                     async with model_cache_lock:
+                         known_models_cache.clear()
+                         known_models_cache.update(m["id"] for m in data.get("data", []))
+                 except (json.JSONDecodeError, KeyError, TypeError) as e:
+                     logging.warning(f"Failed to parse model cache from backend response: {e}")
 
         # Filter response headers to avoid proxy-related conflicts
         response_headers = {k: v for k, v in resp.headers.items()
