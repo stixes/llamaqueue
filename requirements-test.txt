@@ -1,4 +1,5 @@
 fastapi
 httpx
 pytest
+pytest-asyncio
 respx
