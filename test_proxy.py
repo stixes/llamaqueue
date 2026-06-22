@@ -412,16 +412,29 @@ def test_max_concurrent_enforced(client, mock_llama):
 # ─── Current model endpoint tests ─────────────────────────────────────────────
 
 def test_current_model_loaded(client, mock_llama):
-    proxy.active_model = "gemma"
-    proxy.active_inference_count = 1
+    mock_llama.get("http://mock-llama:8080/metrics").respond(
+        status_code=200,
+        text='llamacpp:loaded_model{model="gemma"} 1\nllamacpp:tokens_per_second 42.0\n',
+    )
     response = client.get("/v1/model")
     assert response.status_code == 200
     assert response.json() == {"model": "gemma"}
 
 
 def test_current_model_unloaded(client, mock_llama):
-    proxy.active_model = None
-    proxy.active_inference_count = 0
+    mock_llama.get("http://mock-llama:8080/metrics").respond(
+        status_code=200,
+        text='llamacpp:tokens_per_second 0.0\n',
+    )
+    response = client.get("/v1/model")
+    assert response.status_code == 200
+    assert response.json() == {"model": None}
+
+
+def test_current_model_backend_unreachable(client, mock_llama):
+    mock_llama.get("http://mock-llama:8080/metrics").mock(
+        side_effect=Exception("connection refused")
+    )
     response = client.get("/v1/model")
     assert response.status_code == 200
     assert response.json() == {"model": None}
