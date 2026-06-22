@@ -277,17 +277,17 @@ async def handle_metrics(request: Request):
     return Response(content="\n".join(output_lines) + "\n", media_type="text/plain")
 
 async def handle_current_model(request: Request):
-    """Query llama-server for the currently loaded model via metrics."""
+    """Query llama-server for the currently loaded model via /v1/models."""
     client = request.app.state.client
     try:
-        resp = await client.get(f"{LLAMA_URL}/metrics", timeout=ADMIN_TIMEOUT)
+        resp = await client.get(f"{LLAMA_URL}/v1/models", timeout=ADMIN_TIMEOUT)
         if resp.status_code == 200:
-            match = re.search(r'model="([^"]+)"', resp.text)
-            if match:
-                return Response(
-                    content=json.dumps({"model": match.group(1)}),
-                    media_type="application/json",
-                )
+            for model in resp.json().get("data", []):
+                if model.get("status", {}).get("value") == "loaded":
+                    return Response(
+                        content=json.dumps({"model": model["id"]}),
+                        media_type="application/json",
+                    )
     except Exception:
         pass
     return Response(
