@@ -276,6 +276,14 @@ async def handle_metrics(request: Request):
 
     return Response(content="\n".join(output_lines) + "\n", media_type="text/plain")
 
+async def handle_current_model(request: Request):
+    """Return the currently loaded model (if any)."""
+    return Response(
+        content=json.dumps({"model": active_model}),
+        media_type="application/json",
+    )
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 async def proxy(request: Request, path: str):
     # Security: Normalize path and prevent directory traversal (SSRF-lite)
@@ -286,6 +294,10 @@ async def proxy(request: Request, path: str):
     query = request.url.query
     url = f"{LLAMA_URL}/{path}?{query}" if query else f"{LLAMA_URL}/{path}"
     clean_path = path.strip("/")
+
+    # 0. Current model status: return proxy's tracked active model
+    if method == "GET" and clean_path == "v1/model":
+        return await handle_current_model(request)
 
     # 1. Inference calls: Sent to the queue
     if method != "OPTIONS" and clean_path in QUEUE_PATHS:

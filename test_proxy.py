@@ -407,3 +407,21 @@ def test_max_concurrent_enforced(client, mock_llama):
         s.release.set()
     for t in threads[1:]:
         t.join(timeout=5)
+
+
+# ─── Current model endpoint tests ─────────────────────────────────────────────
+
+def test_current_model_loaded(client, mock_llama):
+    proxy.active_model = "gemma"
+    proxy.active_inference_count = 1
+    response = client.get("/v1/model")
+    assert response.status_code == 200
+    assert response.json() == {"model": "gemma"}
+
+
+def test_current_model_unloaded(client, mock_llama):
+    proxy.active_model = None
+    proxy.active_inference_count = 0
+    response = client.get("/v1/model")
+    assert response.status_code == 200
+    assert response.json() == {"model": None}
